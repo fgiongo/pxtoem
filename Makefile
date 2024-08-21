@@ -1,15 +1,20 @@
 CC=cc
-CFLAGS=-Wall -Wextra -std=c99
+CFLAGS=-Wall -Wextra -std=c99 -O0 -ggdb
 OBJ= main.o
 
-make: main.o
-	$(CC) -o pxtoem main.o
+make: main.o pxtoem.o Text.o
+	$(CC) $(CFLAGS) -o pxtoem main.o pxtoem.o Text.o
 
-
-main.o: main.c
+main.o: main.c pxtoem.h Text.h
 	$(CC) -c -o main.o main.c
+
+pxtoem.o: pxtoem.c pxtoem.h Text.h
+	$(CC) -c -o pxtoem.o pxtoem.c
+
+Text.o: Text.c Text.h
+	$(CC) -c -o Text.o Text.c
 
 .PHONY: clean
 
 clean:
-	rm -f main.o
+	rm -f *.o
