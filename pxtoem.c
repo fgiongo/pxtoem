@@ -75,7 +75,7 @@ struct Text convert(struct Text txt)
 
         // Try to find next target
         // (will return -1 if it fails to find one)
-        px_index = find_px(txt, px_index);
+        px_index = find_px(txt, px_index + 2);
 
         // Could not find another 'px' string so exit loop
         if (px_index < 0)
@@ -94,6 +94,8 @@ struct Text convert(struct Text txt)
 int find_px(struct Text txt, int start_index)
 {
     // TODO: implement this
+    // needs to guard against string buffer overflow
+    // check call inside of loop to see why
     return 0;
 }
 
