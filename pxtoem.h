@@ -1,19 +1,17 @@
 #ifndef PXTOEM_H
 #define PXTOEM_H
 
-#define TEXT_INIT_SIZE 2048
-#define BUF_SIZE 32
-#define EM_SIZE 16.0
+#define MATCH_FAIL -1
+#define STRBUFSIZE 64
 
-void crash(const char *errmsg, unsigned char errcode);
-struct Text get_text(FILE *fp);
-struct Text convert(struct Text txt);
-int find_px(struct Text txt, int start_index);
-int find_num(struct Text txt, int px_index);
-void append_txt(struct Text src, struct Text *dst, int start, int end);
-void copy_px(struct Text src, int num_index, char *dest);
-void convert_px(char *in_px, char *out_em);
-void write_em(char *src, struct Text *dest);
-void copy_until_end(struct Text src, struct Text *dest, int start);
+void error(const char *errmsg, unsigned char errcode);
+struct Text read_file(FILE *fp);
+void try_Text_init(struct Text *txt);
+void try_Text_append_char(char c, struct Text *txt);
+void try_Text_append_str(char *str, struct Text *txt, size_t n);
+struct Text convert_px_to_em(const struct Text txt, float emsize);
+int parse_dec(const char *str, int len);
+int parse_dec_int(const char *str, int len);
+int match_any_char(const char *str, int str_len, const char *ch, int ch_len);
 
 #endif

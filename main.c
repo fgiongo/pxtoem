@@ -10,9 +10,10 @@ int main(int argc, char **argv)
     FILE *input = stdin;
     FILE *output = stdout;
     struct Text txt, converted;
-
-    txt = get_text(input);
-    converted = convert(txt);
+    int emsize = 16;
+    txt = read_file(input);
+    converted = convert_px_to_em(txt, emsize);
+    fputs(converted.data, output);
     free(txt.data);
     return 0;
 }

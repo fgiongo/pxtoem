@@ -6,13 +6,13 @@ make: main.o pxtoem.o Text.o
 	$(CC) $(CFLAGS) -o pxtoem main.o pxtoem.o Text.o
 
 main.o: main.c pxtoem.h Text.h
-	$(CC) -c -o main.o main.c
+	$(CC) $(CFLAGS) -c -o main.o main.c
 
 pxtoem.o: pxtoem.c pxtoem.h Text.h
-	$(CC) -c -o pxtoem.o pxtoem.c
+	$(CC) $(CFLAGS) -c -o pxtoem.o pxtoem.c
 
 Text.o: Text.c Text.h
-	$(CC) -c -o Text.o Text.c
+	$(CC) $(CFLAGS) -c -o Text.o Text.c
 
 .PHONY: clean
 

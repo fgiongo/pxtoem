@@ -1,129 +1,197 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <ctype.h>
 #include "pxtoem.h"
 #include "Text.h"
 
-void crash(const char *errmsg, unsigned char errcode)
+void error(const char *errmsg, unsigned char errcode)
 {
+    fputs("CRITICAL ERROR: ", stderr);
     fputs(errmsg, stderr);
     exit(errcode);
 }
 
-struct Text get_text(FILE *fp)
+struct Text read_file(FILE *fp)
 {
     int c;
     struct Text txt;
-    char *errmsg = "Error(get_text): bad alloc";
-
-    if (Text_init(&txt, TEXT_INIT_SIZE) != 0)
+    try_Text_init(&txt);
+    while ((c = fgetc(fp)) != EOF)
     {
-        crash(errmsg, 1);
-    }
-
-    c = fgetc(fp);
-    while (c != EOF)
-    {
-        if (Text_append_char((char) c, &txt) != 0)
-        {
-            crash(errmsg, 2);
-        }
-        c = fgetc(fp);
-    }
-
-    if (Text_append_char('\0', &txt))
-    {
-        crash(errmsg, 2);
+        try_Text_append_char(c, &txt);
     }
     return txt;
 }
 
-// Does the thing!
-struct Text convert(struct Text txt)
+void try_Text_init(struct Text *txt)
+{
+    char *errmsg = "Text_init: bad alloc\n";
+    if (Text_init(txt) != TEXT_SUCCESS)
+    {
+        error(errmsg, 1);
+    }
+}
+
+void try_Text_append_char(char c, struct Text *txt)
+{
+    char *errmsg = "Text_append_char: bad alloc\n";
+    if (Text_append_char((char) c, txt) != TEXT_SUCCESS)
+    {
+        error(errmsg, 1);
+    }
+}
+
+void try_Text_append_str(char *str, struct Text *txt, size_t n)
+{
+    char *errmsg = "Text_append_str: bad alloc\n";
+    if (Text_append_str(str, txt, n) != TEXT_SUCCESS)
+    {
+        error(errmsg, 1);
+    }
+}
+
+// How the sausage is made (messy but efficient)
+struct Text convert_px_to_em(const struct Text txt, float emsize)
 {
     struct Text out;
-    int px_index, num_index, write_index;
-    char px_num[BUF_SIZE], em_num[BUF_SIZE];
-    
-    Text_init(&out, TEXT_INIT_SIZE);
-
-    // Get index of first occurrence of the string 'px'
-    px_index = 0;
-    px_index = find_px(txt, px_index);
-
-    // Get index of number preceding pt_index, if exists
-    // otherwise gets -1
-    num_index = find_num(txt, px_index);
-
-    // We need an index to copy text unrelated to any conversion
-    write_index = 0;
-
-    // This loop only gets executed if find_num finds a target
-    while (num_index >= 0)
+    try_Text_init(&out);
+    if ((emsize == 0.0))
     {
-        // Copy text unrelated to conversion to output
-        // up until number to be converted
-        append_txt(txt, &out, write_index, num_index);
-
-        // Advance index past 'px' string
-        write_index = px_index + 2;
-
-        // Copy number to be converted, convert it, write it
-        copy_px(txt, num_index, px_num);
-        convert_px(px_num, em_num);
-        write_em(em_num, &out);
-
-        // Try to find next target
-        // (will return -1 if it fails to find one)
-        px_index = find_px(txt, px_index + 2);
-
-        // Could not find another 'px' string so exit loop
-        if (px_index < 0)
-        {
-            break;
-        }
-
-        num_index = find_num(txt, px_index);
+        error("convert_px_to_em: emsize cannot be zero\n", 1);
     }
-
-    // No more targets, copy what's left and return it
-    copy_until_end(txt, &out, write_index);
+    size_t i = 0, len = txt.size, numlen;
+    int match;
+    float num;
+    char converted[STRBUFSIZE];
+    // match gets index of next decimal digit (or '.') in input text
+    while (i < txt.size
+           && (match = match_any_char(&txt.data[i], len, ".0123456789", 11))
+           != MATCH_FAIL)
+    {
+        // Copy input text to output up until match index
+        try_Text_append_str(&txt.data[i], &out, match);
+        // Consume processed input
+        i += match;
+        len -= match;
+        // If we have found a number
+        if((numlen = parse_dec(&txt.data[i], len)))
+        {
+            // If it is a valid px value
+            if (txt.size > i + numlen + 1
+                && txt.data[i + numlen] == 'p'
+                && txt.data[i + numlen + 1] == 'x')
+            {
+                // Convert it
+                num = strtof(&txt.data[i], NULL);
+                num /= emsize;
+                snprintf(converted, STRBUFSIZE, "%.4f", num);
+                // Consume processed input
+                i += numlen + 2;
+                len -= numlen + 2;
+                // Write it to output
+                numlen = strlen(converted);
+                try_Text_append_str(converted, &out, numlen);
+                try_Text_append_str("em", &out, 2);
+            }
+            else // Is a number but not a px value
+            {
+                // Copy number to output
+                try_Text_append_str(&txt.data[i], &out, numlen);
+                // Consume processed input
+                i += numlen;
+                len -= numlen;
+            }
+        }
+        else // Isn't a number, matched a '.'
+        {
+            // Write it to output
+            try_Text_append_char(txt.data[i], &out);
+            // Consume input
+            i++;
+            len--;
+        }
+        // No more matches, copy whatever is left
+    }
+    if (i < txt.size)
+    {
+        try_Text_append_str(&txt.data[i], &out, txt.size - i);
+    }
     return out;
 }
 
-int find_px(struct Text txt, int start_index)
+// If str points to a rational number in decimal representation (int or float
+// in conventional notation) the funtion retuns number of characters of the
+// representation, otherwise returns 0;
+int parse_dec(const char *str, int len)
 {
-    // TODO: implement this
-    // needs to guard against string buffer overflow
-    // check call inside of loop to see why
+    int int_len, frac_len;
+    if (len <= 0)
+    {
+        return 0;
+    }
+
+    // Match the integer part of number
+    int_len = parse_dec_int(str, len);
+
+    // Try to match a decimal part
+    if (len > int_len && str[int_len] == '.')
+    {
+        if (len > int_len + 1){
+            frac_len = parse_dec_int(&str[int_len + 1], len - int_len - 1);
+        }
+        else
+        {
+            return int_len + 1;
+        }
+    }
+    else
+    {
+        return int_len;
+    }
+
+    // Handle case where we only matched '.'
+    if (int_len + frac_len == 0)
+    {
+        return 0;
+    }
+    else 
+    {
+        return int_len + frac_len + 1;
+    }
+}
+
+// If str points to an integer in decimal representation the funtion retuns
+// number of characters of the representation, otherwise returns 0;
+int parse_dec_int(const char *str, int len)
+{
+    if (len <= 0)
+    {
+        return 0;
+    }
+    for (int i = 0; i < len; i++)
+    {
+        if (match_any_char(&str[i], 1, "0123456789", 10) == MATCH_FAIL)
+        {
+            return i;
+        }
+    }
     return 0;
 }
 
-int find_num(struct Text txt, int px_index)
+// Searches str for any of the characters in ch, returns index of
+// first value found, otherwise returns MATCH_FAIL;
+int match_any_char(const char *str, int str_len, const char *ch, int ch_len)
 {
-    // TODO: implement this
-    // remember to check for negatives
-    return 0;
-}
-
-void append_txt(struct Text src, struct Text *dest, int start, int end)
-{
-    // TODO: implement this
-}
-void copy_px(struct Text src, int num_index, char *dest)
-{
-    // TODO: implement this
-}
-void convert_px(char *in_px, char *out_em)
-{
-    // TODO: implement this
-}
-void write_em(char *src, struct Text *dest)
-{
-    // TODO: implement this
-}
-
-void copy_until_end(struct Text src, struct Text *dest, int start)
-{
-    // TODO: implement this
+    for (int i = 0; i < str_len; i++)
+    {
+        for (int j = 0; j < ch_len; j++)
+        {
+            if (str[i] == ch[j])
+            {
+                return i;
+            }
+        }
+    }
+    return MATCH_FAIL;
 }
